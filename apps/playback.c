@@ -50,7 +50,6 @@
 #include "audiohw.h"
 #include "general.h"
 #include <stdio.h>
-#include <string.h>
 
 #ifdef HAVE_TAGCACHE
 #include "tagcache.h"
@@ -982,28 +981,11 @@ static void playback_aa_process_one(void)
 
     if (playlist_check(off))
     {
-        bool idle = playback_aa_buffer_idle();
         wipe_mp3entry(&aa_id3);
         if (playback_aa_fill_id3(off, &aa_id3))
-        {
-            const char *tail = aa_id3.path;
-            if (tail)
-            {
-                const char *p = strrchr(tail, '/');
-                if (p) tail = p + 1;
-            }
-            stallf("AA start off=%d idle=%d fill=%d %s",
-                   off, (int)idle, (int)filling, tail ? tail : "?");
             current_done = albumart_cache_work(off, &aa_id3);
-        }
         else
-        {
-            stallf("AA start off=%d idle=%d fill=%d (no id3)",
-                   off, (int)idle, (int)filling);
             current_done = albumart_cache_work(off, NULL);
-        }
-        stallf("AA done off=%d ok=%d fill=%d", off, (int)current_done,
-               (int)filling);
     }
 
     if (current_done)
@@ -1311,7 +1293,18 @@ static void audio_update_filebuf_watermark(int seconds)
     {
         if (!rbcodec_format_is_atomic(id3->codectype))
         {
-            bytes = id3->bitrate * (1000/8) * seconds;
+            unsigned int br = id3->bitrate;
+
+            /* VBR codecs (e.g. FLAC) may report bitrate=0; estimate from
+               file size and duration so the watermark is meaningful.
+               Divide before multiply to avoid 32-bit overflow on large
+               files (filesize * 8 wraps above 512 MB). */
+            if (br == 0 && id3->length > 0 && id3->filesize > 0)
+                br = (unsigned int)(id3->filesize
+                                    / (id3->length / 8000 + 1)
+                                    / 1000);
+
+            bytes = br * (1000/8) * seconds;
         }
         else
         {
@@ -1331,8 +1324,10 @@ static void audio_update_filebuf_watermark(int seconds)
     }
 
     /* Actually setting zero disables the notification and we use that
-       to detect that it has been reset */
-    buf_set_watermark(MAX(bytes, 1));
+       to detect that it has been reset.  Use a 128 KB floor rather than
+       1: a wm of 1 is unreachable when non-audio handles (ID3, bitmaps)
+       keep the useful count positive, which deadlocks the refill path. */
+    buf_set_watermark(MAX(bytes, 1024*128));
     logf("fwmark: %zu", bytes);
 }
 

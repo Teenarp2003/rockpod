@@ -1631,16 +1631,14 @@ static void NORETURN_ATTR buffering_thread(void)
                 /* The buffer is low and we're idle, just watching the levels
                    - call the callbacks to get new data */
                 send_event(BUFFER_EVENT_BUFFER_LOW, NULL);
-            }
 
-            /* Resume filling handles that still have data on disk.
-               This must not be gated on BUF_WATERMARK: the watermark
-               controls when to ask playback for new tracks, but existing
-               handles with remaining data should always be resumed once
-               the codec has freed ring space. */
-            if (data_counters.remaining > 0) {
-                shrink_buffer();
-                filling = fill_buffer();
+                /* Continue anything else we haven't finished - it might
+                   get booted off or stop early because the receiver hasn't
+                   had a chance to clear anything yet */
+                if (data_counters.remaining > 0) {
+                    shrink_buffer();
+                    filling = fill_buffer();
+                }
             }
         }
     }

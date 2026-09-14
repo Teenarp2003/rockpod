@@ -258,10 +258,6 @@ static int decode_ident_to_scratch(const struct aa_ident *id)
         emb = &embedded;
     }
 
-    stallf("AA dec start src=%d emb=%lu/%lu %s",
-           (int)id->src, emb ? (unsigned long)emb->pos : 0UL,
-           emb ? (unsigned long)emb->size : 0UL, tail ? tail : "?");
-
     fd = open(path, O_RDONLY);
     if (fd < 0)
     {
@@ -271,8 +267,6 @@ static int decode_ident_to_scratch(const struct aa_ident *id)
 
     rc = albumart_decode_fd(fd, path, &slot_dim[d], emb, scratch, max_size);
     close(fd);
-
-    stallf("AA dec done rc=%d %s", rc, tail ? tail : "?");
 
     if (rc <= (int)sizeof(struct bitmap))
         return 0;
